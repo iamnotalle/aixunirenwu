@@ -1,15 +1,16 @@
 import { fallbackReply } from "../../../lib/fallback";
 import { PERSONA_PROMPT } from "../../../lib/persona";
+import { getIdentityById, getRelationshipName, getRelationshipNote } from "../../../lib/scenes";
 
 export const runtime = "nodejs";
 
 const MAX_MESSAGES = 12;
 
-function buildTranscript(messages) {
+function buildTranscript(messages, identity) {
   return messages
     .slice(-MAX_MESSAGES)
     .map((message) => {
-      const role = message.role === "assistant" ? "熹贵妃" : "来客";
+      const role = message.role === "assistant" ? "熹贵妃" : identity.label;
       return `${role}：${message.content}`;
     })
     .join("\n");
@@ -43,6 +44,8 @@ export async function POST(request) {
   }
 
   const messages = Array.isArray(body.messages) ? body.messages : [];
+  const identity = getIdentityById(body.identityId);
+  const relationship = getRelationshipName(body.relationship || identity.initialRelationship);
   const lastUserMessage = [...messages]
     .reverse()
     .find((message) => message.role === "user" && message.content?.trim());
@@ -53,13 +56,20 @@ export async function POST(request) {
 
   if (!process.env.OPENAI_API_KEY) {
     return Response.json({
-      reply: fallbackReply(lastUserMessage.content),
+      reply: fallbackReply(lastUserMessage.content, identity.id, relationship),
       mode: "fallback"
     });
   }
 
-  const transcript = buildTranscript(messages);
+  const transcript = buildTranscript(messages, identity);
   const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  const scenePrompt = [
+    `【当前来客身份】${identity.label}`,
+    `【当前场景】${identity.sceneTitle}：${identity.description}`,
+    `【身份话术】${identity.promptRule}`,
+    `【关系状态】${relationship}：${getRelationshipNote(relationship)}`,
+    "关系状态只用于调整语气，不要在回复中直说“关系状态”。"
+  ].join("\n");
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -69,7 +79,7 @@ export async function POST(request) {
     },
     body: JSON.stringify({
       model,
-      instructions: PERSONA_PROMPT,
+      instructions: `${PERSONA_PROMPT}\n\n${scenePrompt}`,
       input: `以下是当前对话。请严格以熹贵妃甄嬛的身份，只回复最后一位来客。\n\n${transcript}`,
       temperature: 0.85,
       max_output_tokens: 220
