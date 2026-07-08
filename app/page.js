@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { IDENTITIES, getIdentityById } from "../lib/scenes";
+import { IDENTITIES, getAttitudeFor, getIdentityById } from "../lib/scenes";
+
+const MEMORY_KEY = "zhenhuan_memory_v1";
+const RECENT_MESSAGE_LIMIT = 10;
 
 function getRelationshipAfterTurn(identityId, currentRelationship, messages, latestText) {
   const text = latestText || "";
@@ -50,11 +53,69 @@ function getRelationshipAfterTurn(identityId, currentRelationship, messages, lat
   return currentRelationship;
 }
 
+function sanitizeMessages(messages) {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .filter((message) => ["assistant", "user"].includes(message.role) && typeof message.content === "string")
+    .map((message) => ({
+      role: message.role,
+      content: message.content.slice(0, 500)
+    }))
+    .slice(-RECENT_MESSAGE_LIMIT);
+}
+
+function readMemory() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(MEMORY_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const identity = getIdentityById(parsed.identityId);
+
+    return {
+      version: 1,
+      identityId: identity.id,
+      identityLabel: identity.label,
+      userTitle: typeof parsed.userTitle === "string" && parsed.userTitle.trim()
+        ? parsed.userTitle.trim().slice(0, 16)
+        : identity.label,
+      relationship: parsed.relationship || identity.initialRelationship,
+      attitude: parsed.attitude || getAttitudeFor(identity.id, parsed.relationship || identity.initialRelationship),
+      lastTopic: typeof parsed.lastTopic === "string" ? parsed.lastTopic.slice(0, 80) : "",
+      messages: sanitizeMessages(parsed.messages),
+      updatedAt: parsed.updatedAt || ""
+    };
+  } catch {
+    return null;
+  }
+}
+
+function summarizeTopic(text) {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+  return compact.length > 42 ? `${compact.slice(0, 42)}...` : compact;
+}
+
+function detectUserTitle(text) {
+  const match = text.match(/(?:我叫|叫我|唤我|称我为|名唤)([^，。,.！!？?\s]{1,10})/);
+  return match?.[1]?.trim() || "";
+}
+
+function formatMemoryDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
+}
+
 export default function Home() {
   const [selectedIdentityId, setSelectedIdentityId] = useState("");
   const [relationship, setRelationship] = useState("试探");
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
+  const [userTitleInput, setUserTitleInput] = useState("");
+  const [savedMemory, setSavedMemory] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const endRef = useRef(null);
@@ -63,26 +124,95 @@ export default function Home() {
     () => (selectedIdentityId ? getIdentityById(selectedIdentityId) : null),
     [selectedIdentityId]
   );
+  const activeMemory = selectedIdentity && savedMemory?.identityId === selectedIdentity.id ? savedMemory : null;
+  const userTitle = activeMemory?.userTitle || selectedIdentity?.label || "你";
+  const attitude = selectedIdentity ? getAttitudeFor(selectedIdentity.id, relationship) : "";
+
+  useEffect(() => {
+    const memory = readMemory();
+    if (memory) {
+      setSavedMemory(memory);
+      setUserTitleInput(memory.userTitle);
+    }
+  }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  function beginScene(identityId) {
+  function persistMemory(nextMemory) {
+    setSavedMemory(nextMemory);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(MEMORY_KEY, JSON.stringify(nextMemory));
+    }
+  }
+
+  function forgetMemory() {
+    setSavedMemory(null);
+    setUserTitleInput("");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(MEMORY_KEY);
+    }
+  }
+
+  function buildMemory(identity, overrides = {}) {
+    const relationshipName = overrides.relationship || identity.initialRelationship;
+    return {
+      version: 1,
+      identityId: identity.id,
+      identityLabel: identity.label,
+      userTitle: overrides.userTitle || identity.label,
+      relationship: relationshipName,
+      attitude: getAttitudeFor(identity.id, relationshipName),
+      lastTopic: overrides.lastTopic || "",
+      messages: sanitizeMessages(overrides.messages),
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  function beginScene(identityId, options = {}) {
     const identity = getIdentityById(identityId);
+    const nextRelationship = options.relationship || identity.initialRelationship;
+    const nextMessages = options.messages?.length
+      ? sanitizeMessages(options.messages)
+      : [{ role: "assistant", content: identity.opener }];
+    const nextUserTitle = (options.userTitle || userTitleInput || identity.label).trim().slice(0, 16);
+    const nextMemory = buildMemory(identity, {
+      userTitle: nextUserTitle,
+      relationship: nextRelationship,
+      lastTopic: options.lastTopic || "",
+      messages: nextMessages
+    });
+
     setSelectedIdentityId(identity.id);
-    setRelationship(identity.initialRelationship);
-    setMessages([{ role: "assistant", content: identity.opener }]);
+    setRelationship(nextRelationship);
+    setMessages(nextMessages);
+    setUserTitleInput(nextUserTitle);
     setInput("");
     setError("");
+    persistMemory(nextMemory);
+  }
+
+  function resumeMemory() {
+    if (!savedMemory) return;
+    const identity = getIdentityById(savedMemory.identityId);
+    beginScene(identity.id, {
+      userTitle: savedMemory.userTitle,
+      relationship: savedMemory.relationship || identity.initialRelationship,
+      lastTopic: savedMemory.lastTopic,
+      messages: savedMemory.messages?.length
+        ? savedMemory.messages
+        : [{ role: "assistant", content: identity.opener }]
+    });
   }
 
   function resetCurrentScene() {
     if (!selectedIdentity) return;
-    setRelationship(selectedIdentity.initialRelationship);
-    setMessages([{ role: "assistant", content: selectedIdentity.opener }]);
-    setInput("");
-    setError("");
+    beginScene(selectedIdentity.id, {
+      userTitle,
+      relationship: selectedIdentity.initialRelationship,
+      messages: [{ role: "assistant", content: selectedIdentity.opener }]
+    });
   }
 
   function returnToIdentitySelect() {
@@ -97,6 +227,8 @@ export default function Home() {
     const trimmed = text.trim();
     if (!trimmed || isLoading || !selectedIdentity) return;
 
+    const detectedTitle = detectUserTitle(trimmed);
+    const nextUserTitle = detectedTitle || userTitle;
     const nextMessages = [...messages, { role: "user", content: trimmed }];
     const nextRelationship = getRelationshipAfterTurn(
       selectedIdentity.id,
@@ -104,6 +236,14 @@ export default function Home() {
       nextMessages,
       trimmed
     );
+    const nextAttitude = getAttitudeFor(selectedIdentity.id, nextRelationship);
+    const memoryPayload = {
+      userTitle: nextUserTitle,
+      identityLabel: selectedIdentity.label,
+      lastTopic: activeMemory?.lastTopic || "",
+      attitude: nextAttitude,
+      relationship: nextRelationship
+    };
 
     setMessages(nextMessages);
     setRelationship(nextRelationship);
@@ -118,7 +258,8 @@ export default function Home() {
         body: JSON.stringify({
           messages: nextMessages,
           identityId: selectedIdentity.id,
-          relationship: nextRelationship
+          relationship: nextRelationship,
+          memory: memoryPayload
         })
       });
 
@@ -127,10 +268,18 @@ export default function Home() {
         throw new Error(data.error || "回复暂不可用");
       }
 
-      setMessages((current) => [
-        ...current,
+      const completedMessages = [
+        ...nextMessages,
         { role: "assistant", content: data.reply }
-      ]);
+      ];
+      setMessages(completedMessages);
+      setUserTitleInput(nextUserTitle);
+      persistMemory(buildMemory(selectedIdentity, {
+        userTitle: nextUserTitle,
+        relationship: nextRelationship,
+        lastTopic: summarizeTopic(trimmed),
+        messages: completedMessages
+      }));
     } catch (err) {
       setError(err.message || "回复暂不可用");
     } finally {
@@ -162,7 +311,7 @@ export default function Home() {
           <div className="traits">
             <span>场景身份</span>
             <span>关系流转</span>
-            <span>短句对话</span>
+            <span>长期记忆</span>
           </div>
         </div>
       </section>
@@ -204,6 +353,34 @@ export default function Home() {
 
         {!selectedIdentity ? (
           <div className="identity-select">
+            {savedMemory && (
+              <div className="resume-card">
+                <div>
+                  <span className="memory-label">上次记忆</span>
+                  <strong>{savedMemory.identityLabel} · {savedMemory.userTitle}</strong>
+                  <p>
+                    {savedMemory.lastTopic
+                      ? `上回说到：${savedMemory.lastTopic}`
+                      : "还没有留下明确话题。"}
+                  </p>
+                  <p>{savedMemory.attitude}</p>
+                </div>
+                <div className="resume-actions">
+                  <button type="button" onClick={resumeMemory}>继续上次</button>
+                  <button type="button" onClick={forgetMemory}>忘掉</button>
+                </div>
+              </div>
+            )}
+
+            <label className="title-field">
+              <span>称呼</span>
+              <input
+                value={userTitleInput}
+                onChange={(event) => setUserTitleInput(event.target.value.slice(0, 16))}
+                placeholder="如：小主、苏培盛、阿宁"
+              />
+            </label>
+
             <p className="scene-copy">一重宫门，一种说法。来的是谁，话便落在谁身上。</p>
             <div className="identity-grid">
               {IDENTITIES.map((identity) => (
@@ -226,6 +403,18 @@ export default function Home() {
             <div className="status-bar" aria-label="当前关系状态">
               <span>关系</span>
               <strong>{relationship}</strong>
+              <span>态度</span>
+              <strong>{attitude}</strong>
+            </div>
+
+            <div className="memory-strip" aria-label="长期记忆">
+              <span>称呼：{userTitle}</span>
+              <span>
+                上次：{activeMemory?.lastTopic || "暂无"}
+              </span>
+              <span>
+                {activeMemory?.updatedAt ? formatMemoryDate(activeMemory.updatedAt) : ""}
+              </span>
             </div>
 
             <div className="messages" role="log" aria-live="polite">
@@ -235,7 +424,7 @@ export default function Home() {
                   key={`${message.role}-${index}`}
                 >
                   <span className="speaker">
-                    {message.role === "assistant" ? "熹贵妃" : selectedIdentity.label}
+                    {message.role === "assistant" ? "熹贵妃" : userTitle}
                   </span>
                   <p>{message.content}</p>
                 </article>
