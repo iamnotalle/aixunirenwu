@@ -108,6 +108,23 @@ OPENAI_MODEL=gpt-4.1-mini
 
 更完整的发布流程见 `DEPLOY.md`。
 
+## 部署到腾讯云
+
+如果要部署到腾讯云 CVM / 轻量应用服务器，使用仓库内的 Docker 配置：
+
+```bash
+cp .env.production.example .env.production
+sudo docker compose --env-file .env.production up -d --build
+```
+
+部署成功后访问：
+
+```text
+http://服务器公网IP
+```
+
+完整步骤见 `DEPLOY_TENCENT_CLOUD.md`。
+
 ## 目录结构
 
 ```text
@@ -131,6 +148,8 @@ zhenhuan-coze-agent/
 │  └─ zhenhuan-test-cases.md
 ├─ examples/
 │  └─ sample-dialogues.md
+├─ Dockerfile
+├─ docker-compose.yml
 ├─ package.json
 └─ .env.example
 ```

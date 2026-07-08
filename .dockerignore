@@ -1,0 +1,13 @@
+.git
+.next
+.playwright-cli
+node_modules
+output
+*.log
+.env
+.env.*
+!.env.example
+!.env.production.example
+README.md
+DEPLOY.md
+DEPLOY_TENCENT_CLOUD.md
