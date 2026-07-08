@@ -73,6 +73,8 @@ OPENAI_MODEL=gpt-4.1-mini
 5. 点击 Deploy
 6. 拿到 Vercel 生成的网址，发给别人即可直接对话
 
+更完整的发布流程见 `DEPLOY.md`。
+
 ## 目录结构
 
 ```text
