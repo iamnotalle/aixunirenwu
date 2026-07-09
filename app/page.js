@@ -6,6 +6,9 @@ import { IDENTITIES, getAttitudeFor, getIdentityById } from "../lib/scenes";
 
 const MEMORY_KEY = "zhenhuan_memory_v1";
 const RECENT_MESSAGE_LIMIT = 10;
+const CHAT_API_URL =
+  process.env.NEXT_PUBLIC_CHAT_API_URL ||
+  "https://tt1-d2gfab46g22e748ed.service.tcloudbase.com/api/chat";
 
 function getRelationshipAfterTurn(identityId, currentRelationship, messages, latestText) {
   const text = latestText || "";
@@ -253,7 +256,7 @@ export default function Home() {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch(CHAT_API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -295,7 +298,7 @@ export default function Home() {
         lastTopic: summarizeTopic(trimmed),
         messages: completedMessages
       }));
-      setError("");
+      setError("当前为本地兜底回复，检查云函数后可恢复动态对话。");
     } finally {
       setIsLoading(false);
     }

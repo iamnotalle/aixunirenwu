@@ -11,3 +11,4 @@ output/
 .env.*
 !.env.example
 !.env.production.example
+.cloudbase.secret*.json

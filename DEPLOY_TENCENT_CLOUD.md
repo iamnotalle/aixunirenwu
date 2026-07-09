@@ -1,109 +1,55 @@
-# 腾讯云 CVM 部署指南
+# 腾讯云部署说明
 
-这个项目是 Next.js 应用，包含服务端 API，推荐部署到腾讯云 CVM 或轻量应用服务器。部署成功后，别人打开公网地址即可直接聊天。
+当前推荐部署方式是腾讯云 CloudBase，而不是 CVM / 轻量服务器：
 
-## 需要准备
+- CloudBase Web 应用托管负责前端页面
+- CloudBase 云函数负责 `/api/chat`
+- DeepSeek API Key 保存在云函数环境变量里
 
-- 腾讯云 CVM / 轻量应用服务器一台
-- Ubuntu 22.04 / 24.04 推荐
-- 服务器安全组开放 `80` 端口
-- 一个 `OPENAI_API_KEY`
-- 可选：域名和 HTTPS 证书
+完整步骤见 [DEPLOY_CLOUDBASE.md](./DEPLOY_CLOUDBASE.md)。
 
-## 服务器首次初始化
+## 如果一定要用 CVM
 
-SSH 登录服务器后执行：
+仓库里的 `Dockerfile` 当前只会构建静态前端，并通过 Nginx 提供页面。它默认仍然调用已经部署好的 CloudBase 云函数：
 
-```bash
-sudo apt update
-sudo apt install -y ca-certificates curl git
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo systemctl enable --now docker
+```text
+https://tt1-d2gfab46g22e748ed.service.tcloudbase.com/api/chat
 ```
 
-## 拉取代码
+也就是说，CVM 只负责网页入口，不负责模型 API。启动方式：
 
 ```bash
 git clone https://github.com/iamnotalle/aixunirenwu.git
 cd aixunirenwu
+sudo docker compose up -d --build
 ```
 
-如果已经拉过：
-
-```bash
-cd aixunirenwu
-git pull
-```
-
-## 配置环境变量
-
-```bash
-cp .env.production.example .env.production
-nano .env.production
-```
-
-填入：
-
-```text
-OPENAI_API_KEY=你的 OpenAI API Key
-OPENAI_MODEL=gpt-4.1-mini
-```
-
-## 启动服务
-
-```bash
-sudo docker compose --env-file .env.production up -d --build
-```
-
-查看状态：
-
-```bash
-sudo docker compose ps
-sudo docker compose logs -f --tail=100
-```
-
-部署成功后访问：
+访问：
 
 ```text
 http://服务器公网IP
 ```
 
-## 更新版本
-
-```bash
-cd aixunirenwu
-git pull
-sudo docker compose --env-file .env.production up -d --build
-```
+如果你要让 CVM 同时承载后端 API，需要把当前静态 Nginx 镜像改成 Node.js Next 服务，或者另起一个 Node API 服务来代理 DeepSeek。正式运营更建议继续使用 CloudBase 云函数，维护成本更低。
 
 ## 常见问题
 
-### 访问不了
+### 页面能打开，但回复很重复
 
-检查腾讯云安全组是否开放 `80` 端口；检查服务器防火墙：
+通常说明前端没有请求到 DeepSeek 云函数，进入了本地规则兜底。检查浏览器 Network 里是否有请求：
 
-```bash
-sudo ufw status
+```text
+https://tt1-d2gfab46g22e748ed.service.tcloudbase.com/api/chat
 ```
 
-### 80 端口被占用
+返回结果里应该包含：
 
-查看占用：
-
-```bash
-sudo lsof -i :80
+```json
+{
+  "mode": "deepseek"
+}
 ```
 
-如果已经有 Nginx，可以把 `docker-compose.yml` 里的端口改成：
+### CloudBase 测试域名有提示页
 
-```yaml
-ports:
-  - "3000:3000"
-```
-
-然后用 Nginx 反向代理到 `http://127.0.0.1:3000`。
+这是腾讯云默认测试域名的访问提示，不是应用错误。正式分享给用户前，建议在 CloudBase 绑定自定义域名。
