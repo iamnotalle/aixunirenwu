@@ -1,0 +1,12 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "envId": "tt1-d2gfab46g22e748ed",
+  "app": {
+    "serviceName": "aixunirenwu",
+    "framework": "next",
+    "installCommand": "npm ci",
+    "buildCommand": "npm run build",
+    "outputDir": "out",
+    "deployPath": "/"
+  }
+}

@@ -1,5 +1,8 @@
 const nextConfig = {
-  output: "standalone",
+  output: "export",
+  images: {
+    unoptimized: true
+  },
   turbopack: {
     root: __dirname
   }

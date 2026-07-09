@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { fallbackReply } from "../lib/fallback";
 import { IDENTITIES, getAttitudeFor, getIdentityById } from "../lib/scenes";
 
 const MEMORY_KEY = "zhenhuan_memory_v1";
@@ -281,7 +282,20 @@ export default function Home() {
         messages: completedMessages
       }));
     } catch (err) {
-      setError(err.message || "回复暂不可用");
+      const localReply = fallbackReply(trimmed, selectedIdentity.id, nextRelationship, memoryPayload);
+      const completedMessages = [
+        ...nextMessages,
+        { role: "assistant", content: localReply }
+      ];
+      setMessages(completedMessages);
+      setUserTitleInput(nextUserTitle);
+      persistMemory(buildMemory(selectedIdentity, {
+        userTitle: nextUserTitle,
+        relationship: nextRelationship,
+        lastTopic: summarizeTopic(trimmed),
+        messages: completedMessages
+      }));
+      setError("");
     } finally {
       setIsLoading(false);
     }

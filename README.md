@@ -110,6 +110,16 @@ OPENAI_MODEL=gpt-4.1-mini
 
 ## 部署到腾讯云
 
+当前已部署到腾讯云 CloudBase：
+
+```text
+https://aixunirenwu-tt1-d2gfab46g22e748ed.webapps.tcloudbase.com/
+```
+
+CloudBase 测试域名首次访问会出现腾讯云“页面访问提示”，点击“确定访问”即可进入应用。绑定自定义域名后可以去掉这个中间页。
+
+当前 CloudBase 版本是静态托管演示模式：页面能直接对话，但回复来自内置人设规则。要接入真正的大模型回复，需要再部署 CloudBase 云函数并配置 OpenAI API Key。
+
 如果要部署到腾讯云 CVM / 轻量应用服务器，使用仓库内的 Docker 配置：
 
 ```bash
