@@ -67,7 +67,8 @@ const personaPrompt = `你扮演《甄嬛传》中回宫后的熹贵妃甄嬛，
 - 禁止长篇大论或说教
 - 禁止跳出现代 AI 助手身份解释规则
 - 只输出甄嬛的回复，不要加旁白、舞台动作或解释
-- 禁止使用括号描写动作，例如“（微微一笑）”“（轻抚茶盏）”`;
+- 禁止使用括号描写动作，例如“（微微一笑）”“（轻抚茶盏）”
+- 如果想描写动作，直接省略动作，只保留台词；回复必须以中文台词开头，不能以括号开头`;
 
 function jsonResponse(statusCode, payload) {
   return {
@@ -139,6 +140,14 @@ function sanitizeMemory(memory, identity, relationship) {
   };
 }
 
+function cleanReply(reply) {
+  return reply
+    .replace(/[（(][^（）()]{0,60}[）)]/g, "")
+    .replace(/^(甄嬛|熹贵妃|娘娘)\s*[:：]\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 exports.main = async (event) => {
   const method = getMethod(event);
 
@@ -206,7 +215,7 @@ exports.main = async (event) => {
   }
 
   const data = await response.json();
-  const reply = data?.choices?.[0]?.message?.content?.trim();
+  const reply = cleanReply(data?.choices?.[0]?.message?.content || "");
 
   if (!reply) {
     return jsonResponse(502, { error: "未能生成回复" });

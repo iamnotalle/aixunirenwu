@@ -37,6 +37,14 @@ function sanitizeMemory(memory, identity, relationship) {
   };
 }
 
+function cleanReply(reply) {
+  return reply
+    .replace(/[（(][^（）()]{0,60}[）)]/g, "")
+    .replace(/^(甄嬛|熹贵妃|娘娘)\s*[:：]\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function POST(request) {
   let body;
 
@@ -107,7 +115,7 @@ export async function POST(request) {
   }
 
   const data = await response.json();
-  const reply = data?.choices?.[0]?.message?.content?.trim();
+  const reply = cleanReply(data?.choices?.[0]?.message?.content || "");
 
   if (!reply) {
     return Response.json({ error: "未能生成回复" }, { status: 502 });
