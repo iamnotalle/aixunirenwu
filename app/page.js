@@ -330,6 +330,9 @@ export default function Home() {
             <span>关系流转</span>
             <span>长期记忆</span>
           </div>
+          <div className="seal-stamp" aria-hidden="true">
+            <span>碎玉轩</span>
+          </div>
         </div>
       </section>
 
@@ -399,6 +402,11 @@ export default function Home() {
             </label>
 
             <p className="scene-copy">一重宫门，一种说法。来的是谁，话便落在谁身上。</p>
+            <div className="divider-ornament" aria-hidden="true">
+              <span className="divider-line" />
+              <span className="divider-diamond">◆</span>
+              <span className="divider-line" />
+            </div>
             <div className="identity-grid">
               {IDENTITIES.map((identity) => (
                 <button
